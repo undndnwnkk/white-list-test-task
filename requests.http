@@ -1,0 +1,137 @@
+### Примеры запросов к API (формат .http: JetBrains HTTP Client / VS Code REST Client).
+### Время в API — UTC (ISO 8601). Asia/Almaty = UTC+5: 05:00Z = 10:00 по Алматы.
+### 2030-01-07 — понедельник. Менеджеры создаются миграцией (см. README).
+### Те же сценарии через curl: ./scripts/smoke.sh
+
+@baseUrl = http://localhost:8080
+@managerA = 11111111-1111-1111-1111-111111111111
+@managerB = 22222222-2222-2222-2222-222222222222
+
+### 1. Добавить организацию → 201
+# @name company
+POST {{baseUrl}}/companies
+Content-Type: application/json
+
+{
+  "name": "ТОО \"Алматы Трейд Компани\"",
+  "bin": "170340021554",
+  "phone": "+77011234567"
+}
+
+### 1a. Повторный БИН → 409 bin_already_exists
+POST {{baseUrl}}/companies
+Content-Type: application/json
+
+{
+  "name": "Дубликат",
+  "bin": "170340021554",
+  "phone": "+77011234567"
+}
+
+### 1b. Некорректный БИН → 400 validation_error (field: bin)
+POST {{baseUrl}}/companies
+Content-Type: application/json
+
+{
+  "name": "ТОО Ошибка",
+  "bin": "12345",
+  "phone": "+77011234567"
+}
+
+### 2. Список организаций: фильтр по статусу (new | no_answer | refused | meeting_set) и пагинация → 200
+GET {{baseUrl}}/companies?status=new&limit=20&offset=0
+
+### 2a. Неизвестный статус → 400
+GET {{baseUrl}}/companies?status=bogus
+
+### 3. Звонок без ответа → 201, статус компании становится no_answer
+POST {{baseUrl}}/calls
+Content-Type: application/json
+
+{
+  "company_id": "{{company.response.body.id}}",
+  "manager_id": "{{managerA}}",
+  "result": "no_answer"
+}
+
+### 3a. meeting_set без встречи → 400 (field: meeting_id)
+POST {{baseUrl}}/calls
+Content-Type: application/json
+
+{
+  "company_id": "{{company.response.body.id}}",
+  "manager_id": "{{managerA}}",
+  "result": "meeting_set"
+}
+
+### 4. Встреча в 17:30 по Алматы не умещается в рабочий день → 422 outside_working_hours
+POST {{baseUrl}}/meetings
+Content-Type: application/json
+
+{
+  "company_id": "{{company.response.body.id}}",
+  "manager_id": "{{managerA}}",
+  "start_at": "2030-01-07T12:30:00Z"
+}
+
+### 4a. Назначить встречу на 10:00 по Алматы → 201
+# @name meeting
+POST {{baseUrl}}/meetings
+Content-Type: application/json
+
+{
+  "company_id": "{{company.response.body.id}}",
+  "manager_id": "{{managerA}}",
+  "start_at": "2030-01-07T05:00:00Z"
+}
+
+### 4b. Вторая встреча той же организации даже с другим менеджером → 409 company_has_active_meeting
+POST {{baseUrl}}/meetings
+Content-Type: application/json
+
+{
+  "company_id": "{{company.response.body.id}}",
+  "manager_id": "{{managerB}}",
+  "start_at": "2030-01-07T09:00:00Z"
+}
+
+### 5. Звонок с результатом meeting_set, ссылается на созданную встречу → 201
+POST {{baseUrl}}/calls
+Content-Type: application/json
+
+{
+  "company_id": "{{company.response.body.id}}",
+  "manager_id": "{{managerA}}",
+  "result": "meeting_set",
+  "meeting_id": "{{meeting.response.body.id}}"
+}
+
+### 6. Перенести встречу на 14:00 по Алматы → 200; original_start_at и history сохраняются
+PATCH {{baseUrl}}/meetings/{{meeting.response.body.id}}
+Content-Type: application/json
+
+{
+  "start_at": "2030-01-07T09:00:00Z"
+}
+
+### 7. Встреча с полной историей изменений → 200
+GET {{baseUrl}}/meetings/{{meeting.response.body.id}}
+
+### 8. Расписание менеджера на день (день по Asia/Almaty) → 200
+GET {{baseUrl}}/managers/{{managerA}}/schedule?date=2030-01-07
+
+### 9. Отменить встречу → 200; статус компании пересчитывается
+PATCH {{baseUrl}}/meetings/{{meeting.response.body.id}}
+Content-Type: application/json
+
+{
+  "status": "cancelled"
+}
+
+### 9a. Повторная отмена → 409 meeting_cancelled
+PATCH {{baseUrl}}/meetings/{{meeting.response.body.id}}
+Content-Type: application/json
+
+{
+  "status": "cancelled"
+}

@@ -65,6 +65,28 @@ func (r *Repository) UpdateCompanyStatus(ctx context.Context, id uuid.UUID, stat
 	return nil
 }
 
+// RecalculateCompanyStatus sets the company status to the result of its latest
+// call that is still relevant: calls whose meeting was cancelled are ignored.
+// Without such calls the company returns to "new".
+func (r *Repository) RecalculateCompanyStatus(ctx context.Context, id uuid.UUID) (model.CompanyStatus, error) {
+	var status model.CompanyStatus
+	err := r.db.QueryRow(ctx,
+		`UPDATE companies SET status = COALESCE((
+			SELECT c.result FROM calls c
+			LEFT JOIN meetings m ON m.id = c.meeting_id
+			WHERE c.company_id = $1 AND (c.meeting_id IS NULL OR m.status = 'scheduled')
+			ORDER BY c.created_at DESC, c.id DESC
+			LIMIT 1
+		), 'new')
+		WHERE id = $1
+		RETURNING status`, id,
+	).Scan(&status)
+	if err != nil {
+		return "", notFound(err, model.ErrCompanyNotFound)
+	}
+	return status, nil
+}
+
 func (r *Repository) ListCompanies(ctx context.Context, filter model.ListCompaniesFilter) (model.CompanyList, error) {
 	var status *string
 	if filter.Status != nil {

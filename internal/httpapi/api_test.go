@@ -2,16 +2,15 @@ package httpapi
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"testing"
 	"time"
 
 	"github.com/undndnwnkk/white-list-test-task/internal/repository"
 	"github.com/undndnwnkk/white-list-test-task/internal/service"
+	"github.com/undndnwnkk/white-list-test-task/internal/testdb"
 )
 
 const (
@@ -31,21 +30,7 @@ type apiResponse struct {
 
 func setupAPI(t *testing.T) *apiClient {
 	t.Helper()
-	dsn := os.Getenv("TEST_DB_DSN")
-	if dsn == "" {
-		t.Skip("TEST_DB_DSN is not set")
-	}
-
-	ctx := context.Background()
-	pool, err := repository.NewPool(ctx, dsn)
-	if err != nil {
-		t.Fatalf("connect: %v", err)
-	}
-	t.Cleanup(pool.Close)
-
-	if _, err := pool.Exec(ctx, `TRUNCATE calls, meeting_events, meetings, companies`); err != nil {
-		t.Fatalf("truncate: %v", err)
-	}
+	pool := testdb.Open(t, "httpapi")
 
 	svc := service.New(repository.New(pool), func() time.Time { return testNow })
 	server := httptest.NewServer(NewRouter(svc, discardLog))

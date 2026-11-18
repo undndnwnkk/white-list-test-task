@@ -18,6 +18,7 @@ var (
 	ErrMeetingAlreadyStarted   = errors.New("meeting has already started")
 	ErrCompanyHasActiveMeeting = errors.New("company already has an active meeting")
 	ErrMeetingCompanyMismatch  = errors.New("meeting belongs to another company")
+	ErrMeetingAlreadyLinked    = errors.New("meeting is already linked to another call")
 )
 
 type ValidationError struct {

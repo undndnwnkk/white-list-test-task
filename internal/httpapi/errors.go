@@ -34,6 +34,7 @@ var errorMappings = []errorMapping{
 	{model.ErrCompanyHasActiveMeeting, http.StatusConflict, "company_has_active_meeting"},
 	{model.ErrMeetingCancelled, http.StatusConflict, "meeting_cancelled"},
 	{model.ErrMeetingAlreadyStarted, http.StatusConflict, "meeting_already_started"},
+	{model.ErrMeetingAlreadyLinked, http.StatusConflict, "meeting_already_linked"},
 
 	{model.ErrOutsideWorkingHours, http.StatusUnprocessableEntity, "outside_working_hours"},
 	{model.ErrMeetingInPast, http.StatusUnprocessableEntity, "meeting_in_past"},

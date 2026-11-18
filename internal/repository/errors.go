@@ -25,6 +25,7 @@ var constraintErrors = map[string]error{
 	"calls_company_id_fkey":          model.ErrCompanyNotFound,
 	"calls_manager_id_fkey":          model.ErrManagerNotFound,
 	"calls_meeting_id_fkey":          model.ErrMeetingNotFound,
+	"calls_meeting_id_key":           model.ErrMeetingAlreadyLinked,
 	"meeting_events_meeting_id_fkey": model.ErrMeetingNotFound,
 }
 

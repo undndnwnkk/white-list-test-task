@@ -135,8 +135,17 @@ func (s *Service) cancelMeeting(ctx context.Context, id uuid.UUID) (model.Meetin
 			return err
 		}
 
+		// Lock order meeting -> company is safe: flows that lock the company
+		// first (CreateCall, CreateMeeting) never wait for a meeting row lock.
+		if _, err := repo.LockCompany(ctx, meeting.CompanyID); err != nil {
+			return err
+		}
+
 		meeting, err = repo.CancelMeeting(ctx, id)
 		if err != nil {
+			return err
+		}
+		if _, err := repo.RecalculateCompanyStatus(ctx, meeting.CompanyID); err != nil {
 			return err
 		}
 		if _, err := repo.AddMeetingEvent(ctx, id, model.MeetingEventCancelled, &meeting.StartAt, nil); err != nil {

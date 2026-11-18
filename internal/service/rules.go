@@ -42,6 +42,9 @@ func validateNewMeetingStart(start, now time.Time) error {
 	if start.IsZero() {
 		return model.NewValidationError("start_at", "is required")
 	}
+	if !start.Equal(start.Truncate(time.Minute)) {
+		return model.NewValidationError("start_at", "must be a whole minute (seconds must be 0)")
+	}
 	if !start.After(now) {
 		return model.ErrMeetingInPast
 	}

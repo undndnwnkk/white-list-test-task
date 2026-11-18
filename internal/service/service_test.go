@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"sync"
 	"testing"
 	"time"
@@ -13,6 +12,7 @@ import (
 
 	"github.com/undndnwnkk/white-list-test-task/internal/model"
 	"github.com/undndnwnkk/white-list-test-task/internal/repository"
+	"github.com/undndnwnkk/white-list-test-task/internal/testdb"
 )
 
 var (
@@ -23,21 +23,7 @@ var (
 
 func setupService(t *testing.T) *Service {
 	t.Helper()
-	dsn := os.Getenv("TEST_DB_DSN")
-	if dsn == "" {
-		t.Skip("TEST_DB_DSN is not set")
-	}
-
-	ctx := context.Background()
-	pool, err := repository.NewPool(ctx, dsn)
-	if err != nil {
-		t.Fatalf("connect: %v", err)
-	}
-	t.Cleanup(pool.Close)
-
-	if _, err := pool.Exec(ctx, `TRUNCATE calls, meeting_events, meetings, companies`); err != nil {
-		t.Fatalf("truncate: %v", err)
-	}
+	pool := testdb.Open(t, "service")
 	return New(repository.New(pool), func() time.Time { return testNow })
 }
 
@@ -366,5 +352,82 @@ func TestConcurrentBookingOfSameSlot(t *testing.T) {
 		if !errors.Is(err, model.ErrCompanyHasActiveMeeting) && !errors.Is(err, model.ErrManagerBusy) {
 			t.Fatalf("same company: unexpected error %v", err)
 		}
+	}
+}
+
+func TestMeetingCanBeLinkedToOnlyOneCall(t *testing.T) {
+	s := setupService(t)
+	ctx := context.Background()
+	company := newCompany(t, s)
+	m := newMeeting(t, s, company.ID, managerA, almatyTime(7, 10, 0))
+
+	req := model.CreateCallRequest{
+		CompanyID: company.ID, ManagerID: managerA, Result: model.CallResultMeetingSet, MeetingID: &m.ID,
+	}
+	if _, err := s.CreateCall(ctx, req); err != nil {
+		t.Fatalf("first call: %v", err)
+	}
+	if _, err := s.CreateCall(ctx, req); !errors.Is(err, model.ErrMeetingAlreadyLinked) {
+		t.Fatalf("second call: got %v, want ErrMeetingAlreadyLinked", err)
+	}
+}
+
+func TestCancelMeetingRecalculatesCompanyStatus(t *testing.T) {
+	s := setupService(t)
+	ctx := context.Background()
+
+	companyStatus := func(id uuid.UUID) model.CompanyStatus {
+		t.Helper()
+		list, err := s.ListCompanies(ctx, model.ListCompaniesFilter{Limit: MaxListLimit})
+		if err != nil {
+			t.Fatalf("list: %v", err)
+		}
+		for _, c := range list.Items {
+			if c.ID == id {
+				return c.Status
+			}
+		}
+		t.Fatalf("company %s not found", id)
+		return ""
+	}
+
+	// Company with an earlier "no_answer" call falls back to it.
+	called := newCompany(t, s)
+	if _, err := s.CreateCall(ctx, model.CreateCallRequest{
+		CompanyID: called.ID, ManagerID: managerA, Result: model.CallResultNoAnswer,
+	}); err != nil {
+		t.Fatalf("no_answer call: %v", err)
+	}
+	m := newMeeting(t, s, called.ID, managerA, almatyTime(7, 10, 0))
+	if _, err := s.CreateCall(ctx, model.CreateCallRequest{
+		CompanyID: called.ID, ManagerID: managerA, Result: model.CallResultMeetingSet, MeetingID: &m.ID,
+	}); err != nil {
+		t.Fatalf("meeting_set call: %v", err)
+	}
+	if got := companyStatus(called.ID); got != model.CompanyStatusMeetingSet {
+		t.Fatalf("before cancel: status %q, want meeting_set", got)
+	}
+
+	cancelled := model.MeetingStatusCancelled
+	if _, err := s.UpdateMeeting(ctx, m.ID, model.UpdateMeetingRequest{Status: &cancelled}); err != nil {
+		t.Fatalf("cancel: %v", err)
+	}
+	if got := companyStatus(called.ID); got != model.CompanyStatusNoAnswer {
+		t.Fatalf("after cancel: status %q, want no_answer", got)
+	}
+
+	// Company whose only call led to the cancelled meeting returns to "new".
+	fresh := newCompany(t, s)
+	m2 := newMeeting(t, s, fresh.ID, managerB, almatyTime(7, 11, 0))
+	if _, err := s.CreateCall(ctx, model.CreateCallRequest{
+		CompanyID: fresh.ID, ManagerID: managerB, Result: model.CallResultMeetingSet, MeetingID: &m2.ID,
+	}); err != nil {
+		t.Fatalf("meeting_set call: %v", err)
+	}
+	if _, err := s.UpdateMeeting(ctx, m2.ID, model.UpdateMeetingRequest{Status: &cancelled}); err != nil {
+		t.Fatalf("cancel: %v", err)
+	}
+	if got := companyStatus(fresh.ID); got != model.CompanyStatusNew {
+		t.Fatalf("after cancel: status %q, want new", got)
 	}
 }

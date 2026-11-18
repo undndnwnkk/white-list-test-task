@@ -3,13 +3,13 @@ package repository
 import (
 	"context"
 	"errors"
-	"os"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 
 	"github.com/undndnwnkk/white-list-test-task/internal/model"
+	"github.com/undndnwnkk/white-list-test-task/internal/testdb"
 )
 
 var (
@@ -20,21 +20,7 @@ var (
 
 func setup(t *testing.T) *Repository {
 	t.Helper()
-	dsn := os.Getenv("TEST_DB_DSN")
-	if dsn == "" {
-		t.Skip("TEST_DB_DSN is not set")
-	}
-
-	ctx := context.Background()
-	pool, err := NewPool(ctx, dsn)
-	if err != nil {
-		t.Fatalf("connect: %v", err)
-	}
-	t.Cleanup(pool.Close)
-
-	if _, err := pool.Exec(ctx, `TRUNCATE calls, meeting_events, meetings, companies`); err != nil {
-		t.Fatalf("truncate: %v", err)
-	}
+	pool := testdb.Open(t, "repository")
 	return New(pool)
 }
 

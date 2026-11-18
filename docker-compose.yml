@@ -5,8 +5,9 @@ services:
       POSTGRES_USER: crm
       POSTGRES_PASSWORD: crm
       POSTGRES_DB: crm
+    # Published on 5433 by default so it does not clash with a local PostgreSQL.
     ports:
-      - "5432:5432"
+      - "${DB_PORT:-5433}:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -26,6 +27,18 @@ services:
       postgres:
         condition: service_healthy
     restart: on-failure
+
+  # Not started by `docker compose up`; run with `docker compose run --rm --build tests`.
+  tests:
+    profiles: ["test"]
+    build:
+      context: .
+      target: test
+    environment:
+      TEST_DB_DSN: postgres://crm:crm@postgres:5432/crm_test?sslmode=disable
+    depends_on:
+      postgres:
+        condition: service_healthy
 
 volumes:
   pgdata:

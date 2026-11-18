@@ -57,6 +57,8 @@ func TestValidateNewMeetingStart(t *testing.T) {
 		want  error
 	}{
 		{"zero time", time.Time{}, model.ErrValidation},
+		{"seconds are rejected", almatyTime(7, 13, 0).Add(30 * time.Second), model.ErrValidation},
+		{"nanoseconds are rejected", almatyTime(7, 13, 0).Add(time.Millisecond), model.ErrValidation},
 		{"in the past", almatyTime(7, 10, 0), model.ErrMeetingInPast},
 		{"exactly now", now, model.ErrMeetingInPast},
 		{"future within working hours", almatyTime(7, 13, 0), nil},
