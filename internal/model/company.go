@@ -15,6 +15,14 @@ const (
 	CompanyStatusMeetingSet CompanyStatus = "meeting_set"
 )
 
+func (s CompanyStatus) Valid() bool {
+	switch s {
+	case CompanyStatusNew, CompanyStatusNoAnswer, CompanyStatusRefused, CompanyStatusMeetingSet:
+		return true
+	}
+	return false
+}
+
 type Company struct {
 	ID        uuid.UUID     `json:"id"`
 	Name      string        `json:"name"`

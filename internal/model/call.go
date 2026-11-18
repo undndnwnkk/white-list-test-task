@@ -14,6 +14,18 @@ const (
 	CallResultMeetingSet CallResult = "meeting_set"
 )
 
+func (r CallResult) Valid() bool {
+	switch r {
+	case CallResultNoAnswer, CallResultRefused, CallResultMeetingSet:
+		return true
+	}
+	return false
+}
+
+func (r CallResult) CompanyStatus() CompanyStatus {
+	return CompanyStatus(r)
+}
+
 type Call struct {
 	ID        uuid.UUID  `json:"id"`
 	CompanyID uuid.UUID  `json:"company_id"`
