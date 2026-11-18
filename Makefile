@@ -3,7 +3,19 @@ export
 
 MIGRATIONS_DIR ?= migrations
 
-.PHONY: db-up db-down migrate-create migrate-up migrate-down migrate-reset migrate-status test
+.PHONY: up down run build db-up db-down migrate-create migrate-up migrate-down migrate-reset migrate-status test
+
+up:
+	docker compose up --build -d --wait
+
+down:
+	docker compose down
+
+run:
+	go run ./cmd/app
+
+build:
+	go build -o bin/app ./cmd/app
 
 db-up:
 	docker compose up -d --wait postgres
